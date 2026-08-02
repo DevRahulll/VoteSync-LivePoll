@@ -1,9 +1,10 @@
 import { type Request, type Response } from "express";
-import { signupSchema } from "./validator.js";
+import { signinSchema, signupSchema } from "./validator.js";
 import type { ZodError } from "zod";
 import ApiResponse from "../../common/utils/ApiResponse.js";
 import ApiError from "../../common/utils/ApiError.js";
-import { signupService } from "./services.js";
+import { signinService, signupService } from "./services.js";
+import { CookieConfiguration } from "../../common/config/cookies.config.js";
 
 export const signup = async (req: Request, res: Response) => {
     const { fullName, email, password } = req.body;
@@ -41,6 +42,60 @@ export const signup = async (req: Request, res: Response) => {
                 .json(ApiResponse.error(error.message));
         }
         console.error("Signup error:", error);
+        return res.status(500).json(ApiResponse.error("Internal server error"));
+    }
+};
+
+export const singin = async (req: Request, res: Response) => {
+    const { email, password } = req.body;
+
+    const result = await signinSchema.safeParseAsync({ email, password });
+    if (!result.success) {
+        const errors = (result.error as ZodError).issues.map((err) => ({
+            field: err.path.join("."),
+            message: err.message,
+        }));
+        return res
+            .status(400)
+            .json(ApiResponse.error("Validation failed", errors));
+    }
+
+    try {
+        const { accessToken, refreshToken, user } = await signinService(
+            email,
+            password,
+        );
+        const cookieMaxAge = {
+            accessToken: 15 * 60 * 60 * 1000, // 15m
+            refreshToken: 2 * 60 * 60 * 60 * 1000, // 2 h
+        };
+
+        return res
+            .status(200)
+            .cookie("accessToken", accessToken, {
+                ...CookieConfiguration,
+                maxAge: cookieMaxAge.accessToken,
+            })
+            .cookie("refreshToken", refreshToken, {
+                ...CookieConfiguration,
+                maxAge: cookieMaxAge.refreshToken,
+            })
+            .json(
+                ApiResponse.success("User signed in successfully", {
+                    accessToken,
+                    refreshToken,
+                    user,
+                }),
+            );
+    } catch (error) {
+        if (error instanceof ApiError) {
+            return res
+                .status(error.statusCode)
+                .json(ApiResponse.error(error.message));
+        }
+
+        console.error("Signin error:", error);
+
         return res.status(500).json(ApiResponse.error("Internal server error"));
     }
 };

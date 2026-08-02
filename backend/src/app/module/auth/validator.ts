@@ -13,3 +13,10 @@ export const signupSchema = z.object({
         message: "Password must be at least 5 characters long",
     }),
 });
+
+export const signinSchema = z.object({
+    email: z.email({ message: "Invalid emmail" }),
+    password: z
+        .string()
+        .min(5, { message: "Password must be 5 long character" }),
+});

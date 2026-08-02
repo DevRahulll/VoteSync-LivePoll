@@ -1,5 +1,9 @@
 import ApiError from "../../common/utils/ApiError.js";
-import { generatePasswordHash } from "../../common/utils/token.js";
+import {
+    comparePasswordHash,
+    generateAccessAndRefreshToken,
+    generatePasswordHash,
+} from "../../common/utils/token.js";
 import User, { type IUser } from "./model.js";
 
 export const toAuthUser = (
@@ -40,4 +44,34 @@ export const signupService = async (
 
     // return user data without password to frontend;
     return toAuthUser(newUser);
+};
+
+export const signinService = async (email: string, password: string) => {
+    //check if user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+        throw new ApiError(400, "Invalid email or password");
+    }
+
+    //TODO: check is user isVerified or not
+
+    //check this once again
+    const isPasswordValid = await comparePasswordHash(user.password, password);
+    if (!isPasswordValid) {
+        throw new ApiError(400, "invalid email or password");
+    }
+
+    //generate access and Refresh Tokens
+    const { accessToken, refreshToken } = generateAccessAndRefreshToken({
+        userId: user._id,
+    });
+
+    user.refreshToken = await generatePasswordHash(refreshToken);
+    await user.save();
+
+    return {
+        accessToken,
+        refreshToken,
+        user: toAuthUser(user),
+    };
 };
