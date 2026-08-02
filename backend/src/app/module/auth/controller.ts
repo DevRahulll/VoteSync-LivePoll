@@ -3,8 +3,9 @@ import { signinSchema, signupSchema } from "./validator.js";
 import type { ZodError } from "zod";
 import ApiResponse from "../../common/utils/ApiResponse.js";
 import ApiError from "../../common/utils/ApiError.js";
-import { signinService, signupService } from "./services.js";
+import { signinService, signupService, toAuthUser } from "./services.js";
 import { CookieConfiguration } from "../../common/config/cookies.config.js";
+import User from "./model.js";
 
 export const signup = async (req: Request, res: Response) => {
     const { fullName, email, password } = req.body;
@@ -46,7 +47,7 @@ export const signup = async (req: Request, res: Response) => {
     }
 };
 
-export const singin = async (req: Request, res: Response) => {
+export const singnin = async (req: Request, res: Response) => {
     const { email, password } = req.body;
 
     const result = await signinSchema.safeParseAsync({ email, password });
@@ -98,4 +99,33 @@ export const singin = async (req: Request, res: Response) => {
 
         return res.status(500).json(ApiResponse.error("Internal server error"));
     }
+};
+
+export const userProfile = async (req: Request, res: Response) => {
+    return res.status(200).json(
+        ApiResponse.success("User fetched successfully", {
+            user: req.user ? toAuthUser(req.user) : null,
+            accessToken:
+                req.cookies.accessToken ||
+                req.headers.authorization?.split(" ")[1],
+        }),
+    );
+};
+
+export const signOut = async (req: Request, res: Response) => {
+    // also clear the refresh token from DB
+    try {
+        const user = req.user;
+        if (user) {
+            await User.findByIdAndUpdate(user._id, { refreshToken: null });
+        }
+    } catch (error) {
+        console.error("Error in clearing refresh token", error);
+    }
+
+    res.clearCookie("accessToken", CookieConfiguration);
+    res.clearCookie("refreshToken", CookieConfiguration);
+    return res
+        .status(200)
+        .json(ApiResponse.success("User signed out successfully"));
 };

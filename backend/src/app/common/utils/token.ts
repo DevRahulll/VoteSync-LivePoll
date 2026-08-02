@@ -50,8 +50,28 @@ const generateAccessAndRefreshToken = (
     };
 };
 
+const verifyToken = (token: string, secret: Secret): object | string => {
+    try {
+        return jwt.verify(token, secret);
+    } catch (error) {
+        throw new Error("Invalid token");
+    }
+};
+
+const verifyAccessToken = (token: string): object | string => {
+    const secret: Secret = process.env.JWT_ACCESS_SECRET!;
+    return verifyToken(token, secret);
+};
+
+const verifyRefreshToken = (token: string): object | string => {
+    const secret: Secret = process.env.JWT_REFRESH_SECRET!;
+    return verifyToken(token, secret);
+};
+
 export {
     generatePasswordHash,
     comparePasswordHash,
     generateAccessAndRefreshToken,
+    verifyAccessToken,
+    verifyRefreshToken,
 };
