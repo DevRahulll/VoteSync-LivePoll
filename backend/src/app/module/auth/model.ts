@@ -32,7 +32,6 @@ const UserSchema: Schema = new Schema<IUser>(
             type: String,
             required: [true, "Password is required"],
             minLength: 5,
-            maxLength: 30,
         },
         isVerified: {
             type: Boolean,

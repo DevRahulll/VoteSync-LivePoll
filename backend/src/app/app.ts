@@ -1,14 +1,15 @@
 import express, { type Response } from "express";
 import cookieParser from "cookie-parser";
+import morgan from "morgan";
 
 import authRoutes from "./module/auth/routes.js";
-import { success } from "zod";
 
 const createApp = () => {
     const app = express();
 
     app.use(express.json({ limit: "250kb" }));
     app.use(cookieParser());
+    app.use(morgan("dev"));
 
     app.use("/api/auth", authRoutes);
 

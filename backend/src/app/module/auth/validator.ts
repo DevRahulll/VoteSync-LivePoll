@@ -20,3 +20,9 @@ export const signinSchema = z.object({
         .string()
         .min(5, { message: "Password must be 5 long character" }),
 });
+
+export const refreshTokenSchema = z.object({
+    refreshToken: z.string().min(1, {
+        message: "Refresh Token is required",
+    }),
+});
