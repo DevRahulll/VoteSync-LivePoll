@@ -1,0 +1,139 @@
+import z from "zod";
+
+const getPlainTextFromRichText = (value: string) =>
+    value
+        .replace(/<[^>]*>/g, " ")
+        .replace(/&nbsp;|&#160;/gi, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+const richTextString = (fieldName: string, minTextLength = 1) =>
+    z
+        .string()
+        .trim()
+        .min(1, {
+            message: `${fieldName} is required`,
+        })
+        .refine(
+            (value) => getPlainTextFromRichText(value).length >= minTextLength,
+            {
+                message:
+                    minTextLength > 1
+                        ? `${fieldName} must be atleast ${minTextLength} character long`
+                        : `${fieldName} is required`,
+            },
+        );
+
+export const createPollSchema = z.object({
+    pollName: z.string().min(3, {
+        message: "Poll Name must be atleast 3 character long",
+    }),
+    pollDescription: z.string().min(3, {
+        message: "Poll Description must be atleast 3 character long",
+    }),
+    pollDurationInMin: z
+        .number()
+        .int()
+        .min(1, {
+            message: "Poll duration must be at least 1 minute",
+        })
+        .max(10, {
+            message: "Poll Duration cannot be more thant 10 minutes",
+        }),
+    isAnonymousAllowed: z.boolean().default(false),
+    status: z.enum(["draft", "active"]).optional(),
+});
+
+export const updatePollSchema = z
+    .object({
+        pollName: z
+            .string()
+            .min(3, {
+                message: "Poll name must be atleast 3 characters long",
+            })
+            .optional(),
+        pollDescription: z
+            .string()
+            .min(3, {
+                message: "Poll description must be atleast 3 characters long",
+            })
+            .optional(),
+        pollDurationInMin: z
+            .number()
+            .int()
+            .min(1, {
+                message: "poll duration must be at least 1 minute",
+            })
+            .max(30, {
+                message: "Poll duration can not be more than 30 minutes",
+            })
+            .optional(),
+        isAnonymousAllowed: z.boolean().optional(),
+        isResultPublished: z.boolean().optional(),
+        status: z.enum(["draft", "active"]).optional(),
+    })
+    .refine((data) => Object.keys(data).length > 0, {
+        message: "At least one field is required to update the poll",
+    });
+
+const createOptionSchema = z.object({
+    text: richTextString("Option text"),
+    order: z
+        .number()
+        .int()
+        .positive({ message: "Order must be a positive integer" }),
+});
+
+const validateOrderedItems = <
+    T extends {
+        order: number;
+    },
+>(
+    items: T[],
+    ctx: z.RefinementCtx,
+    pathLabel: string,
+) => {
+    const orders = items.map((item) => item.order);
+
+    if (new Set(orders).size !== orders.length) {
+        ctx.addIssue({
+            code: "custom",
+            message: `${pathLabel} order must be unique`,
+        });
+    }
+    const sortedOrders = [...orders].sort((a, b) => a - b);
+    const hasContinuousOrder = sortedOrders.every(
+        (order, index) => order === index + 1,
+    );
+
+    if (!hasContinuousOrder) {
+        ctx.addIssue({
+            code: "custom",
+            message: `${pathLabel} order must be continuous starting from 1`,
+        });
+    }
+};
+
+export const createQuestionSchema = z
+    .object({
+        question: richTextString("Question", 3),
+        isRequired: z.boolean().default(true),
+        questionNumber: z.number().int().positive({
+            message: "Question number must be a positive integer",
+        }),
+        options: z
+            .array(createOptionSchema)
+            .min(2, {
+                message: "At least 2 options are required",
+            })
+            .max(4, {
+                message: "Maximum 4 options are allowed",
+            }),
+    })
+    .superRefine((data, ctx) => {
+        validateOrderedItems(data.options, ctx, "Option");
+    });
+
+export type ICreatePoll = z.infer<typeof createPollSchema>;
+export type IUpdatePoll = z.infer<typeof updatePollSchema>;
+export type ICreateQuestion = z.infer<typeof createQuestionSchema>;
