@@ -1,5 +1,10 @@
 import type mongoose from "mongoose";
-import type { ICreatePoll, ICreateQuestion, IUpdatePoll } from "./validator.js";
+import type {
+    ICreatePoll,
+    ICreateQuestion,
+    IUpdatePoll,
+    IUpdateQuestion,
+} from "./validator.js";
 import { Poll, Question } from "./model.js";
 import ApiError from "../../common/utils/ApiError.js";
 import { sanitizeRichText } from "../../common/utils/sanitizeHtml.js";
@@ -20,6 +25,18 @@ type CreateQuestionServiceInput = ICreateQuestion & {
 
 type DeletePollServiceInput = {
     pollId: string;
+    userId: mongoose.Types.ObjectId;
+};
+
+type updateQuestionServiceInput = IUpdateQuestion & {
+    pollId: string;
+    questionId: string;
+    userId: mongoose.Types.ObjectId;
+};
+
+type DeleteQuestionServiceInput = {
+    pollId: string;
+    questionId: string;
     userId: mongoose.Types.ObjectId;
 };
 
@@ -163,4 +180,113 @@ export const createQuestionService = async ({
 
     const savedQuestion = await questionObj.save();
     return savedQuestion;
+};
+
+export const updateQuestionService = async ({
+    pollId,
+    questionId,
+    userId,
+    question,
+    isRequired,
+    options,
+}: updateQuestionServiceInput) => {
+    const poll = await Poll.findOne({ _id: pollId, createdBy: userId });
+
+    if (!poll) {
+        throw new ApiError(404, "Poll not found");
+    }
+
+    const questionDocument = await Question.findOne({
+        _id: questionId,
+        pollId,
+    });
+
+    if (!questionDocument) {
+        throw new ApiError(404, "Question not found");
+    }
+
+    if (question !== undefined) {
+        questionDocument.question = sanitizeRichText(question);
+    }
+
+    if (isRequired !== undefined) {
+        questionDocument.isRequired = isRequired;
+    }
+
+    if (options !== undefined) {
+        const existingOptions = questionDocument.options as any[];
+        const existingOptionsById = new Map(
+            existingOptions.map((option) => [String(option._id), option]),
+        );
+        const submittedOptionIds = new Set(
+            options
+                .map((option) => option._id)
+                .filter((optionId): optionId is string => Boolean(optionId)),
+        );
+
+        const removedOptionsWithVotes = existingOptions.filter(
+            (option) =>
+                !submittedOptionIds.has(String(option._id)) &&
+                (option.votes ?? 0) > 0,
+        );
+
+        if (removedOptionsWithVotes.length > 0) {
+            throw new ApiError(
+                400,
+                "Cannot remove options that already have votes",
+            );
+        }
+
+        questionDocument.options = options.map((option) => {
+            if (option._id) {
+                const existingOption = existingOptionsById.get(option._id);
+
+                if (existingOption) {
+                    throw new ApiError(
+                        400,
+                        "Option not found in this question",
+                    );
+                }
+
+                return {
+                    _id: existingOption._id,
+                    text: sanitizeRichText(option.text),
+                    order: option.order,
+                    votes: existingOption.votes ?? 0,
+                };
+            }
+
+            return {
+                text: sanitizeRichText(option.text),
+                order: option.order,
+                votes: 0,
+            };
+        }) as any;
+    }
+
+    const updatedQuestion = await questionDocument.save();
+
+    return updatedQuestion;
+};
+
+export const deleteQuestionService = async ({
+    pollId,
+    userId,
+    questionId,
+}: DeleteQuestionServiceInput) => {
+    const poll = await Poll.findOne({ _id: pollId, createdBy: userId });
+
+    if (!poll) {
+        throw new ApiError(404, "Poll not found");
+    }
+
+    const questionDocument = await Question.findOne({
+        _id: questionId,
+        pollId,
+    });
+    if (!questionDocument) {
+        throw new ApiError(404, "Question not found");
+    }
+
+    //Todo vote
 };

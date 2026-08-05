@@ -134,6 +134,58 @@ export const createQuestionSchema = z
         validateOrderedItems(data.options, ctx, "Option");
     });
 
+const updateQuestionOptionSchema = createOptionSchema.extend({
+    _id: z
+        .string()
+        .min(1, {
+            message: "Option id is invalid",
+        })
+        .optional(),
+});
+
+export const updateQuestionSchema = z
+    .object({
+        question: richTextString("Question", 3).optional(),
+        isRequired: z.boolean().optional(),
+        options: z
+            .array(updateQuestionOptionSchema)
+            .min(2, {
+                message: "At least 2 options are required",
+            })
+            .max(4, {
+                message: "Max 4 options are allowed",
+            })
+            .optional(),
+    })
+    .superRefine((data, ctx) => {
+        if (
+            data.question === undefined &&
+            data.options === undefined &&
+            data.isRequired === undefined
+        ) {
+            ctx.addIssue({
+                code: "custom",
+                message:
+                    "At least one field is required to update the question",
+            });
+        }
+
+        if (data.options) {
+            validateOrderedItems(data.options, ctx, "Option");
+            const optionIds = data.options
+                .map((option) => option._id)
+                .filter((optionId): optionId is string => Boolean(optionId));
+
+            if (new Set(optionIds).size !== optionIds.length) {
+                ctx.addIssue({
+                    code: "custom",
+                    message: "Option id must be unique",
+                });
+            }
+        }
+    });
+
 export type ICreatePoll = z.infer<typeof createPollSchema>;
 export type IUpdatePoll = z.infer<typeof updatePollSchema>;
 export type ICreateQuestion = z.infer<typeof createQuestionSchema>;
+export type IUpdateQuestion = z.infer<typeof updateQuestionSchema>;
